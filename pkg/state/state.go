@@ -21,6 +21,8 @@ import (
 	"github.com/roboll/helmfile/pkg/remote"
 	"github.com/roboll/helmfile/pkg/tmpl"
 
+	"github.com/klebediev/vals"
+
 	"regexp"
 
 	"github.com/tatsushid/go-prettytable"
@@ -1515,7 +1517,7 @@ func (st *HelmState) generateTemporaryValuesFiles(values []interface{}, missingF
 			}
 			st.logger.Debugf("successfully generated the value file at %s. produced:\n%s", path, string(yamlBytes))
 			generatedFiles = append(generatedFiles, valfile.Name())
-		case map[interface{}]interface{}:
+		case map[interface{}]interface{}, map[string]interface{}:
 			valfile, err := ioutil.TempFile("", "values")
 			if err != nil {
 				return nil, err
@@ -1551,7 +1553,18 @@ func (st *HelmState) namespaceAndValuesFlags(helm helmexec.Interface, release *R
 		}
 	}
 
-	generatedFiles, err := st.generateTemporaryValuesFiles(values, release.MissingFileHandler)
+	valuesMap := map[string]interface{}{"values": values}
+	valuesMapRendered, err := vals.Eval(valuesMap)
+	if err != nil {
+		return nil, err
+	}
+
+	valuesRendered, ok := valuesMapRendered["values"].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("Rendered values type %T can't be converted to []interface{}", valuesMapRendered["values"])
+	}
+
+	generatedFiles, err := st.generateTemporaryValuesFiles(valuesRendered, release.MissingFileHandler)
 	if err != nil {
 		return nil, err
 	}
